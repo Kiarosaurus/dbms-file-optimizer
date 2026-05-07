@@ -214,9 +214,8 @@ class QueryCompiler:
         col = self._parse_qualified_name()
         return col, None
 
-    # ------------------------------------------------------------------ #
-    # JOIN clause                                                          #
-    # ------------------------------------------------------------------ #
+
+    # JOIN clause 
 
     # parsea JOIN table ON left_col op right_col retornando tabla y JoinClause
     def _parse_join_clause(self) -> Tuple[str, JoinClause]:
@@ -360,9 +359,8 @@ class QueryCompiler:
             return tok.lexeme
         return self._parse_qualified_name()
 
-    # ------------------------------------------------------------------ #
-    # INSERT INTO                                                          #
-    # ------------------------------------------------------------------ #
+    
+    # INSERT INTO
 
     # parsea INSERT INTO table VALUES con lista de literales entre paréntesis
     def _parse_insert(self) -> InsertNode:
@@ -411,9 +409,7 @@ class QueryCompiler:
     # por implementar
         raise ParseError("DELETE no implementado aún")
 
-    # ------------------------------------------------------------------ #
-    # Low-level helpers                                                    #
-    # ------------------------------------------------------------------ #
+    # Low-level helpers               
 
     # parsea un nombre qualified como identifier o table.column
     def _parse_qualified_name(self) -> str:

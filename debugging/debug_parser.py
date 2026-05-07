@@ -65,11 +65,40 @@ def test_parse_multiple_statements():
     assert all(isinstance(n, CreateSchemaNode) for n in nodes)
     print("  [OK] test_parse_multiple_statements")
 
+def test_parse_select_star():
+    nodes = _compile("SELECT * FROM Estudiantes")
+    node = nodes[0]
+    assert isinstance(node, QueryNode)
+    assert node.targets == ["*"]
+    assert node.source == "Estudiantes"
+    assert node.filter is None
+    print("  [OK] test_parse_select_star")
 
-if __name__ == "__main__":
-    test_parse_create_basic()
-    test_parse_create_with_index()
-    test_parse_create_rtree()
-    test_parse_insert()
-    test_parse_multiple_statements()
-    print("debug_parser.py: tests CREATE+INSERT pasaron")
+
+def test_parse_select_where_eq():
+    nodes = _compile("SELECT nombre FROM T WHERE id = 42")
+    node = nodes[0]
+    assert node.filter is not None
+    assert isinstance(node.filter, FilterExpr)
+    assert node.filter.operator == "="
+    assert node.filter.right_operand == 42
+    print("  [OK] test_parse_select_where_eq")
+
+
+def test_parse_select_where_and():
+    nodes = _compile("SELECT * FROM T WHERE a > 1 AND b < 10")
+    node = nodes[0]
+    filt = node.filter
+    assert filt.operator == "AND"
+    assert isinstance(filt.left_operand, FilterExpr)
+    assert isinstance(filt.right_operand, FilterExpr)
+    print("  [OK] test_parse_select_where_and")
+
+
+def test_parse_select_aggregate():
+    nodes = _compile("SELECT COUNT(id) FROM T")
+    node = nodes[0]
+    assert len(node.aggregations) == 1
+    assert node.aggregations[0].func_name == "COUNT"
+    assert node.aggregations[0].argument == "id"
+    print("  [OK] test_parse_select_aggregate")

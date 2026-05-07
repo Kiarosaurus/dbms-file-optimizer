@@ -1,10 +1,3 @@
-"""
-debug_lexer.py — pruebas del SQLScanner (lexer) y nodos AST.
-
-Commit relacionado:
-  H+00 (Camila #02): todos los tests de este archivo
-"""
-
 import os
 import sys
 
