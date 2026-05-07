@@ -60,10 +60,43 @@ def test_record_serializer_roundtrip():
     assert abs(recovered["score"] - 9.75) < 0.01
     print("  [OK] test_record_serializer_roundtrip")
 
+def test_workspace_manager_create_project():
+    with tempfile.TemporaryDirectory() as td:
+        wm = WorkspaceManager(td)
+        path = wm.ensure_project("mi_proyecto")
+        assert os.path.isdir(path), "Directorio del proyecto no creado"
+        catalog = os.path.join(path, "catalog.json")
+        assert os.path.exists(catalog), "catalog.json no creado"
+    print("  [OK] test_workspace_manager_create_project")
+
+
+def test_workspace_manager_list_projects():
+    with tempfile.TemporaryDirectory() as td:
+        wm = WorkspaceManager(td)
+        wm.ensure_project("proyecto_a")
+        wm.ensure_project("proyecto_b")
+        projects = wm.get_projects()
+        assert "proyecto_a" in projects
+        assert "proyecto_b" in projects
+    print("  [OK] test_workspace_manager_list_projects")
+
+
+def test_workspace_manager_default():
+    with tempfile.TemporaryDirectory() as td:
+        wm = WorkspaceManager(td)
+        path = wm.ensure_default()
+        assert "default_testing" in path
+        assert os.path.isdir(path)
+    print("  [OK] test_workspace_manager_default")
+
+
 if __name__ == "__main__":
+    print("=== debug_storage.py ===")
     test_write_read_block()
     test_page_size_constraint()
     test_telemetry_counting()
     test_record_serializer_roundtrip()
-    print("debug_storage.py: todos los tests pasaron")
-
+    test_workspace_manager_create_project()
+    test_workspace_manager_list_projects()
+    test_workspace_manager_default()
+    print("Todos los tests pasaron.")
