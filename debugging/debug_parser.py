@@ -65,6 +65,9 @@ def test_parse_multiple_statements():
     assert all(isinstance(n, CreateSchemaNode) for n in nodes)
     print("  [OK] test_parse_multiple_statements")
 
+
+# ─── Commit H+09 ──────────────────────────────────────────────────────────────
+
 def test_parse_select_star():
     nodes = _compile("SELECT * FROM Estudiantes")
     node = nodes[0]
