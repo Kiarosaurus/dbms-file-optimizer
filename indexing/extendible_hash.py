@@ -62,21 +62,31 @@ class ExtendibleHashIndex(BaseIndex):
         bucket_id = self.directory[h]
         page      = self._read_page(bucket_id)   # el único acceso a disco
         return self._bucket_scan(page, key)
-    
-    def add(self, record):
-      key = record[self.key_field]
-      h = self._hash(key)
-      bucket_id = self.directory[h]
-      page = self._read_page(bucket_id)
-      ld, n = self._bucket_header(page)
-      if n >= self.bucket_cap:
-          # TODO: implementar split + doubling en próximo commit
-          raise RuntimeError(
-              f"Bucket lleno (cap={self.bucket_cap}). Split pendiente."
-          )
-      self._bucket_append(page, record, n, ld)
-      self._write_page(bucket_id, bytes(page))
 
+    # inserta un record, haciendo split y doubling del directorio si hay overflow
+    def add(self, record: Dict[str, Any]) -> None:
+        while True:
+            key       = record[self.key_field]
+            h         = self._hash(key)
+            bucket_id = self.directory[h]
+            page      = self._read_page(bucket_id)
+            ld, n     = self._bucket_header(page)
+
+            if n < self.bucket_cap:
+                self._bucket_append(page, record, n, ld)
+                self._write_page(bucket_id, bytes(page))
+                return
+
+            # dobla el directorio cuando local_depth == global_depth
+            if ld == self.global_depth:
+                if self.global_depth >= MAX_GLOBAL_DEPTH:
+                    raise RuntimeError(
+                        f"global_depth cap ({MAX_GLOBAL_DEPTH}) reached; "
+                        "cannot split — check for hash collisions"
+                    )
+                self._double_directory()
+
+            self._split_bucket(bucket_id, h, ld)
 
     # elimina todos los records con la key dada; intenta merge del bucket después del borrado
     def remove(self, key: Any) -> int:
@@ -105,18 +115,68 @@ class ExtendibleHashIndex(BaseIndex):
 
     def reorganize(self) -> None:
         pass   # extendible hashing se autoorganiza
-    
-    def _double_directory(self):
-    # TODO: implementar en próximo commit
-        raise NotImplementedError("directory doubling pendiente")
 
-    def _split_bucket(self, bucket_id, h, local_depth):
-        # TODO: implementar en próximo commit
-        raise NotImplementedError("bucket split pendiente")
+    # ─── Merge de bucket + reducción del directorio ─────────
 
-    def directory_state(self):
-        # TODO: agregar en próximo commit junto con debug helpers
-        return f"global_depth={self.global_depth}  (split no implementado)"
+    # intenta fusionar bucket_id con su buddy si tienen el mismo local_depth y caben juntos
+    def _try_merge_bucket(self, bucket_id: int, h: int) -> None:
+        page = self._read_page(bucket_id)
+        ld, n = self._bucket_header(page)
+
+        if ld == 0:
+            return 
+
+        pattern      = h & ((1 << ld) - 1)
+        buddy_pattern = pattern ^ (1 << (ld - 1))
+
+        buddy_id: Optional[int] = None
+        for i, bid in enumerate(self.directory):
+            if (i & ((1 << ld) - 1)) == buddy_pattern:
+                buddy_id = bid
+                break
+
+        if buddy_id is None or buddy_id == bucket_id:
+            return
+
+        buddy_page = self._read_page(buddy_id)
+        buddy_ld, buddy_n = self._bucket_header(buddy_page)
+
+        # Solo fusionar si el buddy tiene el mismo local_depth y los registros caben
+        if buddy_ld != ld or n + buddy_n > self.bucket_cap:
+            return
+
+        cur_recs   = [self._bucket_rec(page,       i) for i in range(n)]
+        buddy_recs = [self._bucket_rec(buddy_page,  i) for i in range(buddy_n)]
+        merged     = cur_recs + buddy_recs
+
+        new_ld      = ld - 1
+        new_pattern = pattern & ((1 << new_ld) - 1) if new_ld > 0 else 0
+
+        self._write_bucket_records(bucket_id, new_ld, merged)
+
+        # Redirige todas las entradas del directorio con el nuevo prefijo a bucket_id
+        mask = (1 << new_ld) - 1 if new_ld > 0 else 0
+        for i in range(len(self.directory)):
+            if (i & mask) == new_pattern:
+                self.directory[i] = bucket_id
+
+        self._save_meta()
+        self._try_shrink_directory()
+
+    # reduce global_depth a la mitad si todos los buckets tienen local_depth < global_depth
+    def _try_shrink_directory(self) -> None:
+        if self.global_depth == 0:
+            return
+        for bid in set(self.directory):
+            page = self._read_page(bid)
+            ld, _ = self._bucket_header(page)
+            if ld >= self.global_depth:
+                return
+        half = len(self.directory) // 2
+        self.directory = self.directory[:half]
+        self.global_depth -= 1
+        self._save_meta()
+        self._try_shrink_directory()  
 
     # ─── Función hash ────────────
 
@@ -140,8 +200,54 @@ class ExtendibleHashIndex(BaseIndex):
         h = zlib.crc32(raw) & 0xFFFFFFFF
         return h & ((1 << depth) - 1)
 
+    # ─── Duplicación del directorio ──────────────
 
-     # ─── Helpers de página de bucket ─────────────
+    # dobla el directorio de 2^d a 2^(d+1) preservando el routing de buckets existentes
+    def _double_directory(self) -> None:
+        old_size = len(self.directory)
+        # new_dir[i] = old_dir[i % old_size] mantiene los pointers correctos
+        self.directory = [self.directory[i % old_size] for i in range(old_size * 2)]
+        self.global_depth += 1
+        self._save_meta()
+
+    # ─── Split de bucket ──────────
+
+    # redistribuye los registros entre el bucket viejo y el nuevo usando el bit extra
+    def _split_bucket(self, bucket_id: int, h: int, local_depth: int) -> None:
+        page = self._read_page(bucket_id)
+        _, n = self._bucket_header(page)
+        existing = [self._bucket_rec(page, i) for i in range(n)]
+
+        new_depth = local_depth + 1
+        new_id    = self._alloc_block()
+        # pattern: los lower local_depth bits identifican los directory slots de este bucket
+        pattern   = h & ((1 << local_depth) - 1)
+
+        left_recs:  List[Dict] = []
+        right_recs: List[Dict] = []
+        for rec in existing:
+            rh = self._hash(rec[self.key_field], new_depth)
+            # el bit en posición local_depth decide si va al bucket izquierdo o derecho
+            if (rh >> local_depth) & 1 == 0:
+                left_recs.append(rec)
+            else:
+                right_recs.append(rec)
+
+        self._write_bucket_records(bucket_id, new_depth, left_recs)
+        self._write_bucket_records(new_id,    new_depth, right_recs)
+
+        # Actualiza todas las entradas del directorio que pertenecen a esta partición del bucket
+        old_mask = (1 << local_depth) - 1   # 0 cuando local_depth==0 -> coincide con todo
+        for i in range(len(self.directory)):
+            if (i & old_mask) == pattern:
+                if (i >> local_depth) & 1 == 0:
+                    self.directory[i] = bucket_id
+                else:
+                    self.directory[i] = new_id
+
+        self._save_meta()
+
+    # ─── Helpers de página de bucket ─────────────
 
     # lee el header del bucket page y retorna (local_depth, n_records)
     def _bucket_header(self, page: bytearray) -> Tuple[int, int]:
@@ -220,3 +326,19 @@ class ExtendibleHashIndex(BaseIndex):
         self.directory    = [1]
         self._save_meta()
         self._write_bucket_records(1, local_depth=0, records=[])
+
+    # ─── Helpers de debug ────────────
+
+    # retorna un string con el estado del directorio y los buckets para debugging
+    def directory_state(self) -> str:
+        lines = [f"global_depth={self.global_depth}  buckets={self._next_block}"]
+        seen: Dict[int, List[int]] = {}
+        for i, bid in enumerate(self.directory):
+            seen.setdefault(bid, []).append(i)
+        for bid, indices in sorted(seen.items()):
+            page = self._read_page(bid)
+            ld, n = self._bucket_header(page)
+            idx_str = ",".join(str(x) for x in indices)
+            lines.append(f"  bucket block={bid}  local_depth={ld}  n={n}  dir_slots=[{idx_str}]")
+        return "\n".join(lines)
+    

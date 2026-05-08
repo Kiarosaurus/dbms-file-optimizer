@@ -1,4 +1,3 @@
-
 import os
 import sys
 import tempfile
@@ -27,8 +26,6 @@ def _make_hash(tmpdir, bucket_size=5):
         bucket_size=bucket_size,
     )
 
-
-# ─── Commit H+20 ──────────────────────────────────────────────────────────────
 
 def test_bootstrap_single_bucket():
     with tempfile.TemporaryDirectory() as td:
@@ -79,11 +76,67 @@ def test_hash_consistency():
 
 
 
+def test_split_triggered_when_bucket_full():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_hash(td, bucket_size=3)
+        # insertar más de bucket_cap records
+        for i in range(1, 10):
+            idx.add({"id": i, "data": f"d{i}"})
+        # verificar que todos se encuentran
+        for i in range(1, 10):
+            assert idx.search(i) is not None, f"id={i} no encontrado tras split"
+    print("  [OK] test_split_triggered_when_bucket_full")
+
+
+def test_directory_doubles():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_hash(td, bucket_size=2)
+        # forzar múltiples splits
+        for i in range(1, 20):
+            idx.add({"id": i, "data": f"d{i}"})
+        assert idx.global_depth >= 1, "global_depth debe aumentar tras splits"
+        assert len(idx.directory) == 2 ** idx.global_depth
+    print("  [OK] test_directory_doubles")
+
+
+def test_large_insert_no_collision():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_hash(td, bucket_size=4)
+        n = 100
+        for i in range(1, n + 1):
+            idx.add({"id": i, "data": f"data_{i:03d}"})
+        # verificar 20 keys aleatorias
+        import random
+        rng = random.Random(42)
+        sample = rng.sample(range(1, n + 1), 20)
+        for k in sample:
+            found = idx.search(k)
+            assert found is not None, f"id={k} no encontrado en hash grande"
+            assert found["id"] == k
+    print("  [OK] test_large_insert_no_collision")
+
+
+def test_directory_state_output():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_hash(td, bucket_size=3)
+        for i in range(1, 8):
+            idx.add({"id": i, "data": f"d{i}"})
+        state = idx.directory_state()
+        assert "global_depth" in state
+        assert "bucket" in state.lower() or "block" in state.lower()
+    print("  [OK] test_directory_state_output")
+
 
 if __name__ == "__main__":
+    print("=== debug_hash.py ===")
     test_bootstrap_single_bucket()
     test_insert_and_search()
     test_search_miss()
     test_remove_record()
     test_hash_consistency()
-    print("debug_hash.py: tests parciales pasaron (sin split aún)")
+    test_split_triggered_when_bucket_full()
+    test_directory_doubles()
+    test_large_insert_no_collision()
+    test_directory_state_output()
+    print("Todos los tests pasaron.")
+
