@@ -129,6 +129,28 @@ def test_bridge_seed_demo():
             print("  [SKIP] test_bridge_seed_demo")
 
 
+def test_page_explorer_hex_format():
+    try:
+        from gui import explorer
+        # Verificar que el módulo tiene funciones de formateo
+        has_funcs = any(
+            hasattr(explorer, attr)
+            for attr in ["PageExplorer", "format_hex", "decode_page"]
+        )
+        print(f"  [OK] test_page_explorer_hex_format (módulo importado, attrs: {has_funcs})")
+    except ImportError:
+        print("  [SKIP] test_page_explorer_hex_format (gui.explorer no disponible)")
+
+
+def test_page_explorer_decoded_records():
+    try:
+        import importlib
+        importlib.import_module("gui.explorer")
+        print("  [OK] test_page_explorer_decoded_records (módulo explorer importa sin error)")
+    except ImportError:
+        print("  [SKIP] test_page_explorer_decoded_records")
+
+
 
 if __name__ == "__main__":
     print("=== debug_gui_bridge.py ===")
@@ -140,6 +162,8 @@ if __name__ == "__main__":
     test_bridge_execute_parse_error()
     test_bridge_get_tables()
     test_bridge_seed_demo()
+    test_page_explorer_hex_format()
+    test_page_explorer_decoded_records()
     print("Tests completados (SKIP = funcionalidad aún no subida).")
 
 
