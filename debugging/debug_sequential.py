@@ -37,7 +37,6 @@ def test_sequential_insert_and_linear_search():
         assert found["id"] == 3
     print("  [OK] test_sequential_insert_and_linear_search")
 
-
 def test_sequential_search_not_found():
     with tempfile.TemporaryDirectory() as td:
         idx = _make_index(td)
@@ -45,7 +44,6 @@ def test_sequential_search_not_found():
             idx.add(rec)
         assert idx.search(99) is None, "search de key inexistente debe retornar None"
     print("  [OK] test_sequential_search_not_found")
-
 
 def test_sequential_overflow_accumulates():
     with tempfile.TemporaryDirectory() as td:
@@ -56,8 +54,41 @@ def test_sequential_overflow_accumulates():
         assert count == 8, f"Overflow debe tener 8 records, tiene {count}"
     print("  [OK] test_sequential_overflow_accumulates")
 
-if __name__ == "__main__":
-    test_sequential_insert_and_linear_search()
-    test_sequential_search_not_found()
-    test_sequential_overflow_accumulates()
-    print("debug_sequential.py: tests parciales pasaron")
+def test_reorganize_merges_and_sorts():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        # insertar en orden invertido
+        for i in range(10, 0, -1):
+            idx.add({"id": i, "name": f"n_{i}"})
+        idx.reorganize()
+        # overflow debe quedar vacío
+        assert idx._read_count(idx.overflow_path) == 0, "Overflow debe estar vacio post-reorganize"
+        # main debe estar ordenado: leer todos y verificar orden ascendente
+        count = idx._read_count(idx.main_path)
+        ids = [idx._read_record(idx.main_path, i)["id"] for i in range(count)]
+        assert ids == sorted(ids), f"Main no ordenado: {ids}"
+    print("  [OK] test_reorganize_merges_and_sorts")
+
+
+def test_binary_search_after_reorganize():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        for rec in _make_records(20):
+            idx.add(rec)
+        idx.reorganize()
+        found = idx._binary_search_main(10)
+        assert found is not None, "Binary search debe encontrar id=10"
+        assert found["id"] == 10
+    print("  [OK] test_binary_search_after_reorganize")
+
+
+def test_auto_reorganize_on_threshold():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=5)
+        # insertar exactamente K records — el último debe disparar reorganize
+        for rec in _make_records(5):
+            idx.add(rec)
+        # reorganize se dispara automáticamente cuando count >= K
+        ovfl = idx._read_count(idx.overflow_path)
+        assert ovfl == 0, f"Overflow debe estar vacio tras auto-reorganize, tiene {ovfl}"
+    print("  [OK] test_auto_reorganize_on_threshold")

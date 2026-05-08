@@ -43,12 +43,64 @@ class SequentialIndex(BaseIndex):
         self._write_record(self.overflow_path, count, raw)
         count += 1
         self._write_count(self.overflow_path, count)
-        # Falta disparar reorganize() cuando count >= threshold
+        if count >= self.K_threshold:
+            self.reorganize()
     
-    def search(self, key):
-    # por ahora solo scan lineal sobre overflow
-    # TODO: agregar binary search sobre main 
+    # binary search en main, luego linear scan en overflow
+    def search(self, key: Any) -> Optional[Dict[str, Any]]:
+        result = self._binary_search_main(key)
+        if result is not None:
+            return result
         return self._linear_scan_overflow(key)
+    
+
+     # merge de main (sorted) + overflow (≤K records) — cada pagina leida una sola vez
+    def reorganize(self) -> None:
+        overflow_count = self._read_count(self.overflow_path)
+
+        # Overflow acotado por K_threshold — O(K) en RAM, no O(N)
+        ovfl = list(self._scan_records(self.overflow_path, overflow_count))
+        ovfl.sort(key=lambda r: r[self.key_field])
+
+        main_count = self._read_count(self.main_path)
+        tmp_path   = self.main_path + ".tmp"
+
+        def _merged():
+            main_iter = self._scan_records(self.main_path, main_count)
+            ovfl_iter = iter(ovfl)
+            cur_m = next(main_iter, None)
+            cur_o = next(ovfl_iter, None)
+            while cur_m is not None or cur_o is not None:
+                if cur_m is not None and (
+                    cur_o is None or cur_m[self.key_field] <= cur_o[self.key_field]
+                ):
+                    yield cur_m
+                    cur_m = next(main_iter, None)
+                else:
+                    yield cur_o
+                    cur_o = next(ovfl_iter, None)
+
+        self._write_records_sequential(tmp_path, _merged())
+        os.replace(tmp_path, self.main_path)
+        self._write_count(self.overflow_path, 0)
+        self.reorganize_count += 1
+    
+     # busca la key en main con binary search
+    def _binary_search_main(self, key: Any) -> Optional[Dict[str, Any]]:
+        count = self._read_count(self.main_path)
+        lo, hi = 0, count - 1
+        while lo <= hi:
+            mid     = (lo + hi) // 2
+            record  = self._read_record(self.main_path, mid)
+            rec_key = record[self.key_field]
+            if rec_key == key:
+                return record
+            if rec_key < key:
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        return None
+
     
     # scan lineal sobre overflow buscando la key
     def _linear_scan_overflow(self, key: Any) -> Optional[Dict[str, Any]]:
