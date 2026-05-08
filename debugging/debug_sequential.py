@@ -92,3 +92,37 @@ def test_auto_reorganize_on_threshold():
         ovfl = idx._read_count(idx.overflow_path)
         assert ovfl == 0, f"Overflow debe estar vacio tras auto-reorganize, tiene {ovfl}"
     print("  [OK] test_auto_reorganize_on_threshold")
+
+def test_remove_existing_key():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        for rec in _make_records(10):
+            idx.add(rec)
+        removed = idx.remove(5)
+        assert removed >= 1, f"remove debe retornar al menos 1, retorno {removed}"
+        assert idx.search(5) is None, "search(5) debe retornar None post-remove"
+    print("  [OK] test_remove_existing_key")
+
+
+def test_remove_nonexistent_key():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        for rec in _make_records(5):
+            idx.add(rec)
+        removed = idx.remove(999)
+        assert removed == 0, f"remove de key inexistente debe retornar 0, retorno {removed}"
+    print("  [OK] test_remove_nonexistent_key")
+
+
+def test_remove_maintains_sort():
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        for rec in _make_records(8):
+            idx.add(rec)
+        idx.reorganize()
+        idx.remove(4)
+        count = idx._read_count(idx.main_path)
+        ids = [idx._read_record(idx.main_path, i)["id"] for i in range(count)]
+        assert 4 not in ids, "id=4 debe estar eliminado"
+        assert ids == sorted(ids), f"Main debe seguir ordenado: {ids}"
+    print("  [OK] test_remove_maintains_sort")

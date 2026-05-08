@@ -54,6 +54,41 @@ class SequentialIndex(BaseIndex):
         return self._linear_scan_overflow(key)
     
 
+    # elimina por key de ambos archivos — una página leida una sola vez
+    def remove(self, key: Any) -> int:
+        removed = 0
+
+        main_count = self._read_count(self.main_path)
+        tmp_main   = self.main_path + ".tmp"
+
+        def _filter_main():
+            nonlocal removed
+            for rec in self._scan_records(self.main_path, main_count):
+                if rec[self.key_field] == key:
+                    removed += 1
+                else:
+                    yield rec
+
+        self._write_records_sequential(tmp_main, _filter_main())
+        os.replace(tmp_main, self.main_path)
+
+        ovfl_count = self._read_count(self.overflow_path)
+        tmp_ovfl   = self.overflow_path + ".tmp"
+
+        def _filter_ovfl():
+            nonlocal removed
+            for rec in self._scan_records(self.overflow_path, ovfl_count):
+                if rec[self.key_field] == key:
+                    removed += 1
+                else:
+                    yield rec
+
+        self._write_records_sequential(tmp_ovfl, _filter_ovfl())
+        os.replace(tmp_ovfl, self.overflow_path)
+
+        return removed
+    
+
      # merge de main (sorted) + overflow (≤K records) — cada pagina leida una sola vez
     def reorganize(self) -> None:
         overflow_count = self._read_count(self.overflow_path)
