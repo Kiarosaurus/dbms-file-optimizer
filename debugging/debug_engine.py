@@ -151,3 +151,68 @@ def test_full_scan_page_by_page():
         rows = _exec(eng, comp, "SELECT * FROM BigT")
         assert len(rows) == n, f"Full scan debe retornar {n} rows, retornó {len(rows)}"
     print("  [OK] test_full_scan_page_by_page")
+
+def test_merge_join():
+    with tempfile.TemporaryDirectory() as td:
+        eng, comp = _setup(td)
+        _exec(eng, comp, "CREATE TABLE A (id INTEGER, name VARCHAR(10))")
+        _exec(eng, comp, "CREATE TABLE B (id INTEGER, score FLOAT)")
+        for i in range(1, 6):
+            _exec(eng, comp, f"INSERT INTO A VALUES ({i}, 'n{i}')")
+            _exec(eng, comp, f"INSERT INTO B VALUES ({i}, {float(i * 2)})")
+        rows = _exec(eng, comp, "SELECT A.id, B.score FROM A JOIN B ON A.id = B.id")
+        assert len(rows) == 5, f"JOIN debe retornar 5 rows, retornó {len(rows)}"
+    print("  [OK] test_merge_join")
+
+
+def test_hash_join_small_tables():
+    with tempfile.TemporaryDirectory() as td:
+        eng, comp = _setup(td)
+        _exec(eng, comp, "CREATE TABLE X (id INTEGER, v FLOAT)")
+        _exec(eng, comp, "CREATE TABLE Y (id INTEGER, w FLOAT)")
+        for i in [1, 2, 3]:
+            _exec(eng, comp, f"INSERT INTO X VALUES ({i}, {float(i)})")
+        for i in [2, 3, 4]:
+            _exec(eng, comp, f"INSERT INTO Y VALUES ({i}, {float(i * 10)})")
+        rows = _exec(eng, comp, "SELECT * FROM X JOIN Y ON X.id = Y.id")
+        assert len(rows) == 2, f"Hash join debe retornar 2 matches (ids 2,3), retornó {len(rows)}"
+    print("  [OK] test_hash_join_small_tables")
+
+
+def test_massive_ingest_csv():
+    with tempfile.TemporaryDirectory() as td:
+        # crear CSV temporal
+        csv_path = os.path.join(td, "data.csv")
+        n = 50
+        with open(csv_path, "w", newline="") as f:
+            writer = _csv_mod.DictWriter(f, fieldnames=["id", "nombre", "valor"])
+            writer.writeheader()
+            for i in range(1, n + 1):
+                writer.writerow({"id": i, "nombre": f"item_{i}", "valor": i * 1.1})
+
+        init_concurrency(os.path.join(td, "journal.log"))
+        eng = StorageEngine(td)
+        total = eng.massive_ingest(csv_path, "IngestTest")
+        assert total == n, f"massive_ingest debe retornar {n}, retornó {total}"
+        assert "IngestTest" in eng._catalog["tables"]
+    print("  [OK] test_massive_ingest_csv")
+
+
+if __name__ == "__main__":
+    print("=== debug_engine.py ===")
+    test_create_table_sequential()
+    test_create_table_btree()
+    test_create_table_rtree()
+    test_create_duplicate_table()
+    test_insert_basic()
+    test_insert_wrong_column_count()
+    test_select_all()
+    test_select_with_where()
+    test_select_between()
+    test_delete_with_filter()
+    test_group_by_count()
+    test_full_scan_page_by_page()
+    test_merge_join()
+    test_hash_join_small_tables()
+    test_massive_ingest_csv()
+    print("Todos los tests pasaron.")
