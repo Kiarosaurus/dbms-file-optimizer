@@ -126,3 +126,93 @@ def test_remove_maintains_sort():
         assert 4 not in ids, "id=4 debe estar eliminado"
         assert ids == sorted(ids), f"Main debe seguir ordenado: {ids}"
     print("  [OK] test_remove_maintains_sort")
+
+def test_range_search_sorted_main():
+    """range_search en main ordenado retorna solo records en [lo, hi]."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        for rec in _make_records(20):
+            idx.add(rec)
+        idx.reorganize()
+        results = idx.range_search(5, 12)
+        ids = [r["id"] for r in results]
+        assert ids == list(range(5, 13)), f"Esperado [5..12], got {ids}"
+        assert ids == sorted(ids), "Resultado debe estar ordenado"
+    print("  [OK] test_range_search_sorted_main")
+
+
+def test_range_search_includes_overflow():
+    """range_search incluye records del overflow que caen en el rango."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        for i in range(1, 11):
+            idx.add({"id": i, "name": f"n_{i:04d}"})
+        idx.reorganize()
+        # añade al overflow sin disparar reorganize
+        idx.add({"id": 25, "name": "n_0025"})
+        idx.add({"id": 7,  "name": "n_dup7"})   # duplicado — debe deduplicarse
+        results = idx.range_search(5, 28)
+        ids = [r["id"] for r in results]
+        assert 7  in ids, "id=7 debe estar (main y overflow, deduplicado)"
+        assert 25 in ids, "id=25 del overflow debe estar"
+        assert 30 not in ids, "id=30 fuera de rango no debe aparecer"
+        assert ids == sorted(ids), "Resultado debe estar ordenado"
+        assert len(ids) == len(set(ids)), "No debe haber duplicados"
+    print("  [OK] test_range_search_includes_overflow")
+
+
+def test_range_search_empty_result():
+    """range_search fuera del rango retorna lista vacía."""
+    with tempfile.TemporaryDirectory() as td:
+        idx = _make_index(td, k=100)
+        for rec in _make_records(5):
+            idx.add(rec)
+        idx.reorganize()
+        assert idx.range_search(100, 200) == [], "Fuera de rango debe retornar []"
+    print("  [OK] test_range_search_empty_result")
+
+
+def test_range_search_engine_pushdown():
+    """Engine usa range_search (push-down) para BETWEEN en Sequential y BTree."""
+    import tempfile as _tf
+    from engine.core import StorageEngine
+    from parsing.sql_analyzer import QueryCompiler
+
+    with _tf.TemporaryDirectory() as td:
+        eng = StorageEngine(td)
+        qc  = QueryCompiler()
+
+        eng.execute(qc.compile("CREATE TABLE S (id INTEGER, value INTEGER)")[0])
+        for i in range(1, 21):
+            eng.execute(qc.compile(f"INSERT INTO S VALUES ({i}, {i*10})")[0])
+
+        rows = eng.execute(qc.compile("SELECT * FROM S WHERE id BETWEEN 5 AND 10")[0])
+        ids  = sorted(r["S.id"] for r in rows)
+        assert ids == [5,6,7,8,9,10], f"SEQ push-down falló: {ids}"
+
+        eng.execute(qc.compile("CREATE TABLE B (id INTEGER, value INTEGER) INDEX (BTREE id)")[0])
+        for i in range(1, 21):
+            eng.execute(qc.compile(f"INSERT INTO B VALUES ({i}, {i*10})")[0])
+
+        rows2 = eng.execute(qc.compile("SELECT * FROM B WHERE id BETWEEN 8 AND 13")[0])
+        ids2  = sorted(r["B.id"] for r in rows2)
+        assert ids2 == [8,9,10,11,12,13], f"BTREE push-down falló: {ids2}"
+    print("  [OK] test_range_search_engine_pushdown")
+
+
+if __name__ == "__main__":
+    print("=== debug_sequential.py ===")
+    test_sequential_insert_and_linear_search()
+    test_sequential_search_not_found()
+    test_sequential_overflow_accumulates()
+    test_reorganize_merges_and_sorts()
+    test_binary_search_after_reorganize()
+    test_auto_reorganize_on_threshold()
+    test_remove_existing_key()
+    test_remove_nonexistent_key()
+    test_remove_maintains_sort()
+    test_range_search_sorted_main()
+    test_range_search_includes_overflow()
+    test_range_search_empty_result()
+    test_range_search_engine_pushdown()
+    print("Todos los tests pasaron.")

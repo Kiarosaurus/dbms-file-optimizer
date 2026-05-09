@@ -135,6 +135,44 @@ class SequentialIndex(BaseIndex):
             else:
                 hi = mid - 1
         return None
+    
+    # binary search en main para primer idx con key >= start_key; scan overflow lineal
+    def range_search(self, start_key: Any, end_key: Any) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+
+        # ── Main (sorted): binary search al primer record >= start_key ──
+        count = self._read_count(self.main_path)
+        if count > 0:
+            lo, hi, first = 0, count - 1, count
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                if self._read_record(self.main_path, mid)[self.key_field] < start_key:
+                    lo = mid + 1
+                else:
+                    first = mid
+                    hi = mid - 1
+            for i in range(first, count):
+                rec = self._read_record(self.main_path, i)
+                if rec[self.key_field] > end_key:
+                    break
+                results.append(rec)
+
+        # ── linear scan ──
+        for i in range(self._read_count(self.overflow_path)):
+            rec = self._read_record(self.overflow_path, i)
+            k   = rec[self.key_field]
+            if start_key <= k <= end_key:
+                results.append(rec)
+
+        # overflow puede duplicar main antes del próximo reorganize
+        seen: set = set()
+        unique: List[Dict[str, Any]] = []
+        for rec in sorted(results, key=lambda r: r[self.key_field]):
+            k = rec[self.key_field]
+            if k not in seen:
+                seen.add(k)
+                unique.append(rec)
+        return unique
 
     
     # scan lineal sobre overflow buscando la key
