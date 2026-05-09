@@ -151,6 +151,41 @@ def test_page_explorer_decoded_records():
         print("  [SKIP] test_page_explorer_decoded_records")
 
 
+def test_app_instantiation_headless():
+    try:
+        import gui.app
+        print("  [OK] test_app_instantiation_headless (gui.app importa sin error)")
+    except ImportError:
+        print("  [SKIP] test_app_instantiation_headless (gui.app no disponible)")
+    except Exception as e:
+        # tkinter puede fallar en entornos headless al inicializar Display
+        if "display" in str(e).lower() or "tkinter" in str(e).lower():
+            print(f"  [SKIP] test_app_instantiation_headless (entorno headless: {e})")
+        else:
+            raise
+
+
+def test_bridge_integration_full_pipeline():
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            from gui.bridge import JupiterBridge
+            from core.concurrency import init_concurrency
+            init_concurrency(os.path.join(td, "journal.log"))
+            bridge = JupiterBridge(td)
+
+            bridge.execute_sql("CREATE TABLE Pipeline (id INTEGER, label VARCHAR(15))")
+            for i, label in enumerate(["alpha", "beta", "gamma", "delta", "epsilon"], 1):
+                bridge.execute_sql(f"INSERT INTO Pipeline VALUES ({i}, '{label}')")
+
+            result = bridge.execute_sql("SELECT * FROM Pipeline")
+            rows = result.get("rows", result) if isinstance(result, dict) else result
+            assert len(rows) == 5, f"Pipeline debe tener 5 rows, tiene {len(rows)}"
+            print("  [OK] test_bridge_integration_full_pipeline")
+        except ImportError:
+            print("  [SKIP] test_bridge_integration_full_pipeline")
+
+
+
 
 if __name__ == "__main__":
     print("=== debug_gui_bridge.py ===")
@@ -164,6 +199,8 @@ if __name__ == "__main__":
     test_bridge_seed_demo()
     test_page_explorer_hex_format()
     test_page_explorer_decoded_records()
+    test_app_instantiation_headless()
+    test_bridge_integration_full_pipeline()
     print("Tests completados (SKIP = funcionalidad aún no subida).")
 
 
