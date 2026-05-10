@@ -25,8 +25,8 @@ JupiterDB/
 |--------|--------------------------|
 | `core/` | `StorageEngine(base_dir)`, paginacion 4KB, `Telemetry` (conteo de I/O), journaling, `WorkspaceManager` |
 | `indexing/` | Cuatro estructuras de indice; el B+ Tree es clustered (registros reales en hojas) |
-| `parsing/` | Soporta `SELECT`, `INSERT`, `JOIN`, `BETWEEN`, `IN (POINT, RADIUS)`, `GROUP BY`, `BIGINT` |
-| `engine/` | Algoritmos de join (MERGE, EXTERNAL_SORT_MERGE), TPMMS para datos fuera de RAM |
+| `parsing/` | Soporta `CREATE TABLE`, `SELECT`, `INSERT`, `DELETE`, `JOIN`, `BETWEEN`, `IN (POINT, RADIUS/KNN)`, `GROUP BY`, `AND/OR`, `BIGINT` |
+| `engine/` | Algoritmos de join (MERGE, HASH, EXTERNAL_SORT_MERGE), TPMMS para datos fuera de RAM |
 | `gui/` | Visualizacion espacial del R-Tree, explorador de paginas (Decoded + Esquema Visual), selector de proyecto |
 
 ---
@@ -44,13 +44,23 @@ JupiterDB/
 
 ## Sintaxis SQL Soportada
 
+### DDL y DML
+
+```sql
+CREATE TABLE Tabla (id INTEGER, nombre VARCHAR(50)) USING BTREE
+INSERT INTO Tabla VALUES (1, 'Alice')
+DELETE FROM Tabla WHERE id = 1
+```
+
 ### Consulta basica
 
 ```sql
 SELECT * FROM Tabla WHERE campo = valor
+SELECT * FROM Tabla WHERE campo > 10 AND estado = 'activo'
 SELECT campo1, campo2 FROM Tabla WHERE campo BETWEEN a AND b
 SELECT * FROM T1 JOIN T2 ON T1.id = T2.fk
 SELECT campo, COUNT(*) FROM Tabla GROUP BY campo
+SELECT campo, SUM(valor), AVG(valor), MIN(valor), MAX(valor) FROM Tabla GROUP BY campo
 ```
 
 ### Consulta espacial -- columna unica (inferida)
@@ -142,7 +152,7 @@ pip install -r requirements.txt
 ### Lanzador principal (limpieza + GUI)
 
 ```bash
-cd JupiterDB
+cd dbms-file-optimizer
 python run_all.py          # limpia default_testing y lanza la GUI
 python run_all.py --keep   # salta la limpieza, solo lanza la GUI
 ```
@@ -152,7 +162,7 @@ python run_all.py --keep   # salta la limpieza, solo lanza la GUI
 ### Solo GUI (sin limpieza)
 
 ```bash
-cd JupiterDB
+cd dbms-file-optimizer
 python run_gui.py
 ```
 
@@ -163,7 +173,7 @@ Lanza la GUI directamente. Util cuando ya existe data en `default_testing` que s
 ### Benchmark
 
 ```bash
-cd JupiterDB
+cd dbms-file-optimizer
 python benchmarking/run_tests.py
 ```
 
@@ -176,7 +186,7 @@ Salida: `results/metrics.csv`
 ### Informe técnico
 
 ```bash
-cd JupiterDB
+cd dbms-file-optimizer
 python engine/report_generator.py
 ```
 
@@ -286,6 +296,18 @@ Clustered:     buscar clave -> nodo hoja (registro)              [1 acceso final
 ```
 
 En JupiterDB cada nodo ocupa exactamente una pagina de 4096 bytes. El ahorro se multiplica en joins y escaneos de rango, donde se leen decenas o cientos de hojas consecutivas.
+
+---
+
+### Como elige el motor la estrategia de JOIN?
+
+Logica en `engine/core.py` — seleccion segun tamano y tipo de indice:
+
+| Condicion | Estrategia |
+|-----------|-----------|
+| Ambas tablas ordenadas por la join key (B+ Tree o Sequential File) | **MERGE** — streaming, sin materializar |
+| Alguna tabla supera `_EXTERNAL_SORT_THRESHOLD` = 500 filas | **EXTERNAL_SORT_MERGE** — ordena en disco via TPMMS, luego merge |
+| Dataset pequeno (ambas < 500 filas) | **HASH** — build map en memoria, probe en O(1) promedio |
 
 ---
 
