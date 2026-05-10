@@ -195,6 +195,12 @@ def _eval_filter(record: Dict, expr) -> bool:
 
     rhs = expr.right_operand
     op  = expr.operator
+    # coerce string rhs to the stored type when comparing numeric fields
+    if isinstance(val, (int, float)) and isinstance(rhs, str):
+        try:
+            rhs = type(val)(rhs)
+        except (ValueError, TypeError):
+            pass
     if op in ("=", "=="):  return val == rhs
     if op == "!=":         return val != rhs
     if op == "<":          return val < rhs
@@ -240,8 +246,14 @@ def _can_pushdown(expr: FilterExpr, table_name: str) -> bool:
     if "." in col:
         tbl, _ = col.split(".", 1)
         return tbl.lower() == table_name.lower()
-    return True   # unqualified column → assume belongs to this table
+    return True   # unqualified column -> assume belongs to this table
 
+def _apply_alias(rows, table: str, alias: str):
+    """Re-key rows: replace table. prefix with alias. prefix."""
+    old = table + "."
+    new = alias + "."
+    for row in rows:
+        yield {(new + k[len(old):] if k.startswith(old) else k): v for k, v in row.items()}
 
 # parte el WHERE en filtros push-down por tabla y post-join
 def _split_filter(
@@ -482,8 +494,15 @@ class StorageEngine:
         self._save_catalog()
 
         if node.from_file:
-            loaded = self.massive_ingest(node.from_file, name)
-            return f"Table '{name}' created and loaded {loaded} rows from '{node.from_file}'"
+            csv_path = node.from_file
+            if not os.path.isabs(csv_path) and not os.path.exists(csv_path):
+                for candidate_dir in (self.data_dir, "data", os.path.join(os.path.dirname(self.data_dir), "data")):
+                    candidate = os.path.join(candidate_dir, csv_path)
+                    if os.path.exists(candidate):
+                        csv_path = candidate
+                        break
+            loaded = self.massive_ingest(csv_path, name)
+            return f"Table '{name}' created and loaded {loaded} rows from '{csv_path}'"
         return f"Table '{name}' created"
 
     # ------------------------------------------------------------------
@@ -666,17 +685,21 @@ class StorageEngine:
         left_sorted  = (left_bare  == left_pk  and left_meta["index"]  in ("SEQUENTIAL", "BTREE"))
         right_sorted = (right_bare == right_pk and right_meta["index"] in ("SEQUENTIAL", "BTREE"))
 
+        # si hay aliases, ajustar join cols para que apunten a las filas re-keyadas
+        src_alias = node.source_alias
+        jt_alias  = node.join_alias
+        left_join_col_final  = left_join_col.replace(left_table + ".", src_alias + ".", 1) if src_alias else left_join_col
+        right_join_col_final = right_join_col.replace(right_table + ".", jt_alias + ".", 1) if jt_alias else right_join_col
+
         if left_sorted and right_sorted:
             # reorganiza overflow→main ANTES de escanear para garantizar orden en disco
             self._ensure_sorted(left_table)
             self._ensure_sorted(right_table)
             # scan directo como iteradores: merge_join consume sin materializar ambos lados
             strategy = "MERGE"
-            rows = list(merge_join(
-                self._scan_table(left_table,  left_filter),
-                self._scan_table(right_table, right_filter),
-                left_join_col, right_join_col,
-            ))
+            left_iter  = _apply_alias(self._scan_table(left_table,  left_filter), left_table,  src_alias) if src_alias else self._scan_table(left_table,  left_filter)
+            right_iter = _apply_alias(self._scan_table(right_table, right_filter), right_table, jt_alias)  if jt_alias  else self._scan_table(right_table, right_filter)
+            rows = list(merge_join(left_iter, right_iter, left_join_col_final, right_join_col_final))
         else:
             # materializa ambos lados para decidir entre hash y external sort
             left_rows  = list(self._scan_table(left_table,  left_filter))
@@ -688,16 +711,25 @@ class StorageEngine:
                 strategy = "EXTERNAL_SORT_MERGE"
                 sorted_left  = self._sort_for_join(left_table,  left_rows,  left_bare,  left_join_col)
                 sorted_right = self._sort_for_join(right_table, right_rows, right_bare, right_join_col)
+                # re-keya después del sort (sort usa nombres reales de tabla)
+                if src_alias:
+                    sorted_left  = list(_apply_alias(iter(sorted_left),  left_table,  src_alias))
+                if jt_alias:
+                    sorted_right = list(_apply_alias(iter(sorted_right), right_table, jt_alias))
                 rows = list(merge_join(
                     iter(sorted_left), iter(sorted_right),
-                    left_join_col, right_join_col,
+                    left_join_col_final, right_join_col_final,
                 ))
             else:
                 # tablas chicas sin índice — hash join en memoria
                 strategy = "HASH"
+                if src_alias:
+                    left_rows  = list(_apply_alias(iter(left_rows),  left_table,  src_alias))
+                if jt_alias:
+                    right_rows = list(_apply_alias(iter(right_rows), right_table, jt_alias))
                 rows = list(hash_join(
                     iter(left_rows), iter(right_rows),
-                    left_join_col, right_join_col,
+                    left_join_col_final, right_join_col_final,
                 ))
 
         if post_filter:

@@ -184,6 +184,49 @@ def test_bridge_integration_full_pipeline():
         except ImportError:
             print("  [SKIP] test_bridge_integration_full_pipeline")
 
+def test_workspace_manager_via_bridge():
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            from gui.bridge import JupiterBridge
+            from core.concurrency import init_concurrency
+            ws1 = os.path.join(td, "workspace_1")
+            ws2 = os.path.join(td, "workspace_2")
+            os.makedirs(ws1); os.makedirs(ws2)
+            init_concurrency(os.path.join(ws1, "journal.log"))
+            bridge1 = JupiterBridge(ws1)
+            bridge1.execute_sql("CREATE TABLE TW1 (id INTEGER)")
+
+            init_concurrency(os.path.join(ws2, "journal.log"))
+            bridge2 = JupiterBridge(ws2)
+            bridge2.execute_sql("CREATE TABLE TW2 (id INTEGER)")
+
+            assert "TW1" in bridge1.get_tables()
+            assert "TW2" not in bridge1.get_tables(), "Los workspaces deben ser independientes"
+            print("  [OK] test_workspace_manager_via_bridge")
+        except ImportError:
+            print("  [SKIP] test_workspace_manager_via_bridge")
+
+
+def test_massive_ingest_via_bridge():
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            from gui.bridge import JupiterBridge
+            from core.concurrency import init_concurrency
+            init_concurrency(os.path.join(td, "journal.log"))
+            bridge = JupiterBridge(td)
+
+            csv_path = os.path.join(td, "test_data.csv")
+            with open(csv_path, "w", newline="") as f:
+                writer = _csv_mod.DictWriter(f, fieldnames=["id", "nombre", "valor"])
+                writer.writeheader()
+                for i in range(1, 21):
+                    writer.writerow({"id": i, "nombre": f"item_{i}", "valor": i * 2.0})
+
+            total = bridge.massive_ingest_csv(csv_path, "IngestViaGui")
+            assert total == 20, f"massive_ingest debe retornar 20, retornó {total}"
+            print("  [OK] test_massive_ingest_via_bridge")
+        except (ImportError, AttributeError):
+            print("  [SKIP] test_massive_ingest_via_bridge (método no disponible aún)")
 
 
 
@@ -201,6 +244,8 @@ if __name__ == "__main__":
     test_page_explorer_decoded_records()
     test_app_instantiation_headless()
     test_bridge_integration_full_pipeline()
+    test_workspace_manager_via_bridge()
+    test_massive_ingest_via_bridge()
     print("Tests completados (SKIP = funcionalidad aún no subida).")
 
 

@@ -64,7 +64,8 @@ class QueryNode(InstructionNode):
     group_by_cols: List[str] = field(default_factory=list)
     aggregations: List[AggregateExpr] = field(default_factory=list)
     order_by_cols: List[str] = field(default_factory=list)
-
+    source_alias: Optional[str] = None   
+    join_alias: Optional[str] = None
 
 # envuelve un valor literal escalar para la lista de VALUES en INSERT
 @dataclass

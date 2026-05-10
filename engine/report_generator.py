@@ -32,7 +32,7 @@ _IDX_LABELS   = {"Sequential": "Sequential", "BPlusTree": "B+ Tree", "ExtHash": 
 # Data helpers
 # ---------------------------------------------------------------------------
 
-def _load( index_csv: Path, join_csv: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _load(index_csv: Path, join_csv: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     idx  = pd.read_csv(index_csv, dtype=str) if index_csv.exists() else pd.DataFrame()
     join = pd.read_csv(join_csv,  dtype=str) if join_csv.exists()  else pd.DataFrame()
     return idx, join

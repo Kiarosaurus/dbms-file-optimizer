@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .lexer import SQLScanner, Token, TokenKind
 from .ast_nodes import (
@@ -46,6 +46,7 @@ class QueryCompiler:
     def __init__(self):
         self._tokens: List[Token] = []
         self._cursor: int = 0
+        self._alias_map: Dict[str, str] = {}
 
    
     # Public API                                                           
@@ -56,6 +57,7 @@ class QueryCompiler:
         scanner = SQLScanner(query_text)
         self._tokens = scanner.tokenize()
         self._cursor = 0
+        self._alias_map = {}
 
         instructions: List[InstructionNode] = []
         while not self._at_end():
@@ -174,12 +176,16 @@ class QueryCompiler:
 
         self._expect(TokenKind.KW_FROM)
         source = self._consume_identifier()
+        src_alias = self._try_consume_alias()
+        if src_alias:
+            self._alias_map[src_alias] = source
 
         join_target: Optional[str]       = None
+        jt_alias:    Optional[str]       = None
         join_condition: Optional[JoinClause] = None
         if self._current_kind() == TokenKind.KW_JOIN:
             self._advance()
-            join_target, join_condition = self._parse_join_clause()
+            join_target, jt_alias, join_condition = self._parse_join_clause()
 
         filter_expr: Optional[FilterExpr] = None
         if self._current_kind() == TokenKind.KW_WHERE:
@@ -195,9 +201,12 @@ class QueryCompiler:
         order_by_cols: List[str] = []
         if (self._current_kind() == TokenKind.IDENTIFIER
                 and self._current_token().lexeme.upper() == "ORDER"):
-            self._advance()                          # consume ORDER
+            self._advance()                          
             self._expect(TokenKind.KW_BY)
             order_by_cols = self._parse_identifier_list()
+
+        group_by_cols = [self._resolve_alias_in_col(c) for c in group_by_cols]
+        order_by_cols = [self._resolve_alias_in_col(c) for c in order_by_cols]
 
         return QueryNode(
             targets=targets,
@@ -208,26 +217,9 @@ class QueryCompiler:
             group_by_cols=group_by_cols,
             aggregations=aggregations,
             order_by_cols=order_by_cols,
+            source_alias=src_alias,
+           join_alias=jt_alias,
         )
-
-    # parsea la target list del SELECT acumulando columnas y aggregate exprs
-    def _parse_target_list(self) -> Tuple[List[str], List[AggregateExpr]]:
-        targets: List[str]             = []
-        aggregations: List[AggregateExpr] = []
-
-        label, agg = self._parse_one_target()
-        targets.append(label)
-        if agg:
-            aggregations.append(agg)
-
-        while self._current_kind() == TokenKind.PUNCT_COMMA:
-            self._advance()
-            label, agg = self._parse_one_target()
-            targets.append(label)
-            if agg:
-                aggregations.append(agg)
-
-        return targets, aggregations
 
 
     # parsea la target list del SELECT acumulando columnas y aggregate exprs
@@ -275,15 +267,18 @@ class QueryCompiler:
     # JOIN clause 
 
     # parsea JOIN table ON left_col op right_col retornando tabla y JoinClause
-    def _parse_join_clause(self) -> Tuple[str, JoinClause]:
+    def _parse_join_clause(self) -> Tuple[str, Optional[str], JoinClause]:
         join_table = self._consume_identifier()
+        jt_alias = self._try_consume_alias()
+        if jt_alias:
+            self._alias_map[jt_alias] = join_table
         self._expect(TokenKind.KW_ON)
         left_col  = self._parse_qualified_name()
         op_tok    = self._advance()
         if op_tok.kind not in _COMPARISON_OPS:
             raise ParseError(f"Expected comparison operator in JOIN ON, got '{op_tok.lexeme}'")
         right_col = self._parse_qualified_name()
-        return join_table, JoinClause(
+        return join_table, jt_alias, JoinClause(
             right_table=join_table,
             left_col=left_col,
             right_col=right_col,
@@ -346,6 +341,8 @@ class QueryCompiler:
                 f"Expected comparison operator in WHERE, got '{op_tok.lexeme}' "
                 f"at position {op_tok.position}"
             )
+        if op_tok.kind == TokenKind.OP_EQ and self._current_kind() == TokenKind.OP_EQ:
+            self._advance()
         right_val = self._parse_rhs_value()
         return FilterExpr(
             left_operand=left_col,
@@ -478,14 +475,23 @@ class QueryCompiler:
     # Low-level helpers               
 
     # parsea un nombre qualified como identifier o table.column
-    def _parse_qualified_name(self) -> str:
-        name = self._consume_identifier()
-        if self._current_kind() == TokenKind.PUNCT_DOT:
-            self._advance()
-            right = self._consume_identifier()
-            return f"{name}.{right}"
+    def _try_consume_alias(self) -> Optional[str]:
+        if self._current_kind() == TokenKind.IDENTIFIER:
+            return self._advance().lexeme
+        return None
+    def _resolve_alias_in_col(self, name: str) -> str:
+        if "." in name:
+            prefix, col = name.split(".", 1)
+            return f"{self._alias_map.get(prefix, prefix)}.{col}"
         return name
-
+    def _parse_qualified_name(self) -> str:
+         name = self._consume_identifier()
+         if self._current_kind() == TokenKind.PUNCT_DOT:
+             self._advance()
+             right = self._consume_identifier()
+             real = self._alias_map.get(name, name)
+             return f"{real}.{right}"
+         return name
     # parsea una lista de nombres (posiblemente calificados) separados por coma
     def _parse_identifier_list(self) -> List[str]:
         cols = [self._parse_qualified_name()]

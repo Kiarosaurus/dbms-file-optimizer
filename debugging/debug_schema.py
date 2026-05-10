@@ -61,10 +61,32 @@ def test_invalid_str_size_raises():
         pass
     print("  [OK] test_invalid_str_size_raises")
 
+def test_record_size_consistent():
+    fields = [
+        SchemaField("a", FieldType.INTEGER),
+        SchemaField("b", FieldType.STRING, str_size=10),
+    ]
+    ser = RecordSerializer(fields)
+    # INTEGER = 4 bytes, STRING(10) = 10 bytes → total = 14
+    assert ser.record_size == 14, f"record_size incorrecto: {ser.record_size}"
+    print("  [OK] test_record_size_consistent")
+
+
+def test_negative_integer():
+    fields = [SchemaField("n", FieldType.INTEGER)]
+    ser = RecordSerializer(fields)
+    raw = ser.serialize({"n": -999})
+    got = ser.deserialize(raw)
+    assert got["n"] == -999
+    print("  [OK] test_negative_integer")
+
 if __name__ == "__main__":
+    print("=== debug_schema.py ===")
     test_string_truncation()
     test_bigint_range()
     test_mixed_schema_roundtrip()
     test_null_padding_stripped()
     test_invalid_str_size_raises()
-    print("debug_schema.py: todos los tests pasaron")
+    test_record_size_consistent()    
+    test_negative_integer()
+    print("Todos los tests pasaron.")

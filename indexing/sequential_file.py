@@ -120,6 +120,44 @@ class SequentialIndex(BaseIndex):
         self._write_count(self.overflow_path, 0)
         self.reorganize_count += 1
     
+
+    # ─── Page-batched I/O helpers ──────────────────────────────────────────────
+
+    # genera records leyendo ceil(count/RPP) páginas — cada página leída UNA vez
+    def _scan_records(self, path: str, count: int):
+        if count == 0:
+           return
+        n_pages   = (count + self.records_per_page - 1) // self.records_per_page
+        remaining = count
+        for page_num in range(n_pages):
+            block_id = page_num + 1          # block 0 es el header
+            page     = self._load_page(path, block_id)
+            recs_here = min(self.records_per_page, remaining)
+            for slot in range(recs_here):
+                off = slot * self.record_size
+                yield self.serializer.deserialize(bytes(page[off: off + self.record_size]))
+            remaining -= recs_here
+
+    # escribe records page-by-page desde un iterable; retorna total escrito
+    def _write_records_sequential(self, path: str, records_iter) -> int:
+        if not os.path.exists(path):
+            self._write_count(path, 0)       # crea el archivo con header vacío
+        page_buf = bytearray(PAGE_SIZE)
+        slot = 0; block_id = 1; count = 0
+        for rec in records_iter:
+            off = slot * self.record_size
+            page_buf[off: off + self.record_size] = self.serializer.serialize(rec)
+            slot  += 1
+            count += 1
+            if slot == self.records_per_page:
+                self.disk.write_block(path, block_id, bytes(page_buf))
+                page_buf = bytearray(PAGE_SIZE)
+                slot = 0; block_id += 1
+        if slot > 0:
+            self.disk.write_block(path, block_id, bytes(page_buf))
+        self._write_count(path, count)
+        return count
+    
      # busca la key en main con binary search
     def _binary_search_main(self, key: Any) -> Optional[Dict[str, Any]]:
         count = self._read_count(self.main_path)
