@@ -1,0 +1,23 @@
+services:
+  # GUI (Tkinter via X11 forwarding)
+  gui:
+    build: .
+    command: python run_gui.py
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./workspaces:/app/workspaces
+    network_mode: host    
+    stdin_open: true
+    tty: true
+  # Benchmark (headless, no display needed)
+  bench:
+    build: .
+    command: python run_all.py
+    volumes:
+      - ./workspaces:/app/workspaces
+      - ./results:/app/results
+      - ./docs:/app/docs
+    profiles:
+      - bench           
