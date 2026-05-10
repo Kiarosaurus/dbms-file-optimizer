@@ -164,7 +164,10 @@ class QueryCompiler:
             raise ParseError(f"Expected index type (BTREE/HASH/SEQUENTIAL/RTREE), got '{tok.lexeme}'")
         index_kind = tok.lexeme.upper()
         col_name   = self._consume_identifier()
-        return IndexDirective(index_kind=index_kind, col_name=col_name)
+        col_name2: Optional[str] = None
+        if index_kind == "RTREE" and self._current_kind() == TokenKind.IDENTIFIER:
+            col_name2 = self._consume_identifier()
+        return IndexDirective(index_kind=index_kind, col_name=col_name, col_name2=col_name2)
 
     
     # SELECT                                                               

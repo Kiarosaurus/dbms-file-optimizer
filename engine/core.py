@@ -527,9 +527,14 @@ class StorageEngine:
             self._get_index(node.table_name).add(record)
             # si hay rtree secundario, inserta el punto espacial usando el PK como record_id
             if meta.get("rtree_path"):
-                x_val = float(record.get(meta["rtree_col"],   0.0))
-                y_val = float(record.get(meta["rtree_col_y"], 0.0))
-                rid   = int(record.get(fields[0]["name"], 0))
+                x_val  = float(record.get(meta["rtree_col"],   0.0))
+                y_val  = float(record.get(meta["rtree_col_y"], 0.0))
+                pk_raw = record.get(fields[0]["name"])
+                try:
+                    rid = int(pk_raw) if pk_raw is not None else 0
+                except (ValueError, TypeError):
+                    _idx = self._get_index(node.table_name)
+                    rid  = _idx._read_count(_idx.main_path) + _idx._read_count(_idx.overflow_path)
                 self._get_rtree(node.table_name).add((x_val, y_val), rid)
         return f"1 row inserted into '{node.table_name}'"
 
@@ -634,10 +639,18 @@ class StorageEngine:
             hits    = rtree.spatial_query(sf.cx, sf.cy, sf.radius)
             hit_ids = {rid for _, _, rid in hits}
 
-        pk_name = meta["fields"][0]["name"]
-        rows    = []
-        for raw in seq_full_scan(self._get_index(source)):
-            if raw.get(pk_name) in hit_ids:
+        pk_name   = meta["fields"][0]["name"]
+        pk_is_num = meta["fields"][0]["type"] in ("INTEGER", "BIGINT", "FLOAT")
+        rows      = []
+        for i, raw in enumerate(seq_full_scan(self._get_index(source)), start=1):
+            if pk_is_num:
+                try:
+                    rid_key = int(raw.get(pk_name, i))
+                except (ValueError, TypeError):
+                    rid_key = i
+            else:
+                rid_key = i
+            if rid_key in hit_ids:
                 rows.append({f"{source}.{k}": v for k, v in raw.items()})
 
         # post-filter euclidiano con columnas explícitas cuando la query especifica (x, y)
@@ -992,9 +1005,13 @@ class StorageEngine:
                 }
                 index.add(record)
                 if rtree_idx is not None:
-                    x_val = float(record.get(meta["rtree_col"],   0.0))
-                    y_val = float(record.get(meta["rtree_col_y"], 0.0))
-                    rid   = int(record.get(pk_field, inserted + 1))
+                    x_val  = float(record.get(meta["rtree_col"],   0.0))
+                    y_val  = float(record.get(meta["rtree_col_y"], 0.0))
+                    pk_raw = record.get(pk_field)
+                    try:
+                        rid = int(pk_raw) if pk_raw is not None else inserted + 1
+                    except (ValueError, TypeError):
+                        rid = inserted + 1
                     rtree_idx.add((x_val, y_val), rid)
                 inserted += 1
                 if progress_cb and inserted % 100 == 0:

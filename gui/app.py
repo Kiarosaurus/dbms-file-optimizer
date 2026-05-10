@@ -19,6 +19,9 @@ from core.workspace_manager import WorkspaceManager
 from gui.bridge   import QueryBridge, QueryResult
 from gui.explorer import PageViewer
 
+from parsing.sql_analyzer import QueryCompiler
+from parsing.ast_nodes import CreateSchemaNode
+
 # ---------------------------------------------------------------------------
 # Colour palette
 # ---------------------------------------------------------------------------
@@ -629,12 +632,50 @@ class JupiterDBApp(tk.Tk):
         self._status_bar.configure(text="Ejecutando…", fg=_C["yellow"])
         self.update_idletasks()
 
-        try:
+        # Detectar CREATE TABLE FROM FILE para mostrar barra de progreso
+        compiler = QueryCompiler()
+        nodes = compiler.compile(sql)
+        if (len(nodes) == 1 and isinstance(nodes[0], CreateSchemaNode) and nodes[0].from_file):
+            # Es CREATE TABLE FROM FILE, hacer carga con progreso
+            node = nodes[0]
+            table_name = node.table_name
+            csv_path = node.from_file
+            # Resolver path relativo
+            if not os.path.isabs(csv_path):
+                for candidate_dir in (self._active_data_dir, "data", os.path.join(os.path.dirname(self._active_data_dir), "data")):
+                    candidate = os.path.join(candidate_dir, csv_path)
+                    if os.path.exists(candidate):
+                        csv_path = candidate
+                        break
+
+            # Mostrar barra de progreso
+            self._progress_var.set(0)
+            self._progress_pct.configure(text="0%")
+            self._progress_lbl.configure(text=f"Cargando '{table_name}'…")
+            self._progress_frame.grid()
+            self._super_btn.configure(state="disabled")
+
+            q: queue.Queue = queue.Queue()
+            self._ingest_q = q
+
+            def worker():
+                try:
+                    def cb(done, total):
+                        pct = int(done / total * 100) if total else 0
+                        q.put(("progress", pct, done, total))
+                    n = self._bridge.massive_ingest(csv_path, table_name, cb)
+                    q.put(("done", n))
+                except Exception as exc:
+                    q.put(("error", str(exc)))
+
+            threading.Thread(target=worker, daemon=True).start()
+            self.after(150, lambda: self._poll_ingest(q, table_name))
+        else:
+            # SQL normal
             result = self._bridge.execute(sql)
             self._handle_result(result)
             self._refresh_table_list()
             self._refresh_schema()
-        finally:
             self._run_btn.configure(state="normal", text="▶  EJECUTAR")
 
     # rutea el QueryResult segun su kind a la vista correspondiente
@@ -796,7 +837,7 @@ class JupiterDBApp(tk.Tk):
                     )
                     self._progress_frame.grid_remove()
                     self._super_btn.configure(state="normal")
-                    self._run_btn.configure(state="normal")
+                    self._run_btn.configure(state="normal", text="▶  EJECUTAR")
                     self._show_placeholder()
                     self._clear_tree()
                     self._refresh_table_list()
@@ -808,7 +849,7 @@ class JupiterDBApp(tk.Tk):
                     self._set_status(f"Error de carga: {msg[1][:80]}", _C["red"])
                     self._progress_frame.grid_remove()
                     self._super_btn.configure(state="normal")
-                    self._run_btn.configure(state="normal")
+                    self._run_btn.configure(state="normal", text="▶  EJECUTAR")
                     messagebox.showerror(
                         "Error SUPER INSERT", msg[1], parent=self)
                     self._ingest_q = None

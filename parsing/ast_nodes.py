@@ -19,6 +19,7 @@ class ColumnSpec:
 class IndexDirective:
     index_kind: str   # BTREE | HASH | SEQUENTIAL | RTREE
     col_name: str
+    col_name2: Optional[str] = None
 
 
 # nodo AST para CREATE TABLE con columnas e índices opcionales y carga CSV opcional
