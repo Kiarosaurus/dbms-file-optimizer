@@ -168,9 +168,66 @@ class QueryCompiler:
     # SELECT                                                               
     #============================
     # parsea una expresión SELECT con targets FROM JOIN WHERE y GROUP BY
-    def _parse_select(self):
-    #por implementar
-        raise ParseError("SELECT no implementado aún")
+    def _parse_select(self) -> QueryNode:
+        self._expect(TokenKind.KW_SELECT)
+        targets, aggregations = self._parse_target_list()
+
+        self._expect(TokenKind.KW_FROM)
+        source = self._consume_identifier()
+
+        join_target: Optional[str]       = None
+        join_condition: Optional[JoinClause] = None
+        if self._current_kind() == TokenKind.KW_JOIN:
+            self._advance()
+            join_target, join_condition = self._parse_join_clause()
+
+        filter_expr: Optional[FilterExpr] = None
+        if self._current_kind() == TokenKind.KW_WHERE:
+            self._advance()
+            filter_expr = self._parse_filter_chain()
+
+        group_by_cols: List[str] = []
+        if self._current_kind() == TokenKind.KW_GROUP:
+            self._advance()
+            self._expect(TokenKind.KW_BY)
+            group_by_cols = self._parse_identifier_list()
+
+        order_by_cols: List[str] = []
+        if (self._current_kind() == TokenKind.IDENTIFIER
+                and self._current_token().lexeme.upper() == "ORDER"):
+            self._advance()                          # consume ORDER
+            self._expect(TokenKind.KW_BY)
+            order_by_cols = self._parse_identifier_list()
+
+        return QueryNode(
+            targets=targets,
+            source=source,
+            join_target=join_target,
+            join_condition=join_condition,
+            filter=filter_expr,
+            group_by_cols=group_by_cols,
+            aggregations=aggregations,
+            order_by_cols=order_by_cols,
+        )
+
+    # parsea la target list del SELECT acumulando columnas y aggregate exprs
+    def _parse_target_list(self) -> Tuple[List[str], List[AggregateExpr]]:
+        targets: List[str]             = []
+        aggregations: List[AggregateExpr] = []
+
+        label, agg = self._parse_one_target()
+        targets.append(label)
+        if agg:
+            aggregations.append(agg)
+
+        while self._current_kind() == TokenKind.PUNCT_COMMA:
+            self._advance()
+            label, agg = self._parse_one_target()
+            targets.append(label)
+            if agg:
+                aggregations.append(agg)
+
+        return targets, aggregations
 
 
     # parsea la target list del SELECT acumulando columnas y aggregate exprs
@@ -405,9 +462,18 @@ class QueryCompiler:
 
    
     
-    def _parse_delete(self):
-    # por implementar
-        raise ParseError("DELETE no implementado aún")
+    def _parse_delete(self) -> DeleteNode:
+        self._expect(TokenKind.KW_DELETE)
+        self._expect(TokenKind.KW_FROM)
+        table_name = self._consume_identifier()
+
+        filter_expr: Optional[FilterExpr] = None
+        if self._current_kind() == TokenKind.KW_WHERE:
+            self._advance()
+            filter_expr = self._parse_filter_chain()
+
+        return DeleteNode(table_name=table_name, filter=filter_expr)
+
 
     # Low-level helpers               
 

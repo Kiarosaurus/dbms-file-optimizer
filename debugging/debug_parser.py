@@ -66,8 +66,6 @@ def test_parse_multiple_statements():
     print("  [OK] test_parse_multiple_statements")
 
 
-# ─── Commit H+09 ──────────────────────────────────────────────────────────────
-
 def test_parse_select_star():
     nodes = _compile("SELECT * FROM Estudiantes")
     node = nodes[0]
@@ -105,3 +103,99 @@ def test_parse_select_aggregate():
     assert node.aggregations[0].func_name == "COUNT"
     assert node.aggregations[0].argument == "id"
     print("  [OK] test_parse_select_aggregate")
+
+
+def test_parse_join():
+    nodes = _compile("SELECT * FROM A JOIN B ON A.id = B.fk")
+    node = nodes[0]
+    assert node.join_target == "B"
+    assert node.join_condition is not None
+    assert isinstance(node.join_condition, JoinClause)
+    assert node.join_condition.left_col == "A.id"
+    assert node.join_condition.right_col == "B.fk"
+    print("  [OK] test_parse_join")
+
+
+def test_parse_between():
+    nodes = _compile("SELECT * FROM T WHERE score BETWEEN 50 AND 100")
+    node = nodes[0]
+    filt = node.filter
+    # desazucarado como score >= 50 AND score <= 100
+    assert filt.operator == "AND"
+    assert isinstance(filt.left_operand, FilterExpr)
+    assert filt.left_operand.operator == ">="
+    assert filt.right_operand.operator == "<="
+    print("  [OK] test_parse_between")
+
+
+def test_parse_spatial_radius():
+    nodes = _compile("SELECT * FROM Ciudades WHERE x IN (POINT(10.0, 20.0), RADIUS 5)")
+    node = nodes[0]
+    sf = node.filter
+    assert isinstance(sf, SpatialFilterExpr)
+    assert abs(sf.cx - 10.0) < 0.001
+    assert abs(sf.cy - 20.0) < 0.001
+    assert abs(sf.radius - 5.0) < 0.001
+    assert sf.k == 0
+    print("  [OK] test_parse_spatial_radius")
+
+
+def test_parse_spatial_knn():
+    nodes = _compile("SELECT * FROM Ciudades WHERE (lat, lon) IN (POINT(-12.0, -77.0), K 3)")
+    node = nodes[0]
+    sf = node.filter
+    assert isinstance(sf, SpatialFilterExpr)
+    assert sf.k == 3
+    assert len(sf.columns) == 2
+    assert sf.columns[0] == "lat"
+    assert sf.columns[1] == "lon"
+    print("  [OK] test_parse_spatial_knn")
+
+
+def test_parse_spatial_negative_coords():
+    nodes = _compile("SELECT * FROM T WHERE x IN (POINT(-73.9, 40.7), RADIUS 10)")
+    sf = nodes[0].filter
+    assert abs(sf.cx - (-73.9)) < 0.001
+    assert abs(sf.cy - 40.7) < 0.001
+    print("  [OK] test_parse_spatial_negative_coords")
+
+
+def test_parse_delete_with_filter():
+    nodes = _compile("DELETE FROM T WHERE id = 99")
+    node = nodes[0]
+    assert isinstance(node, DeleteNode)
+    assert node.table_name == "T"
+    assert node.filter is not None
+    assert node.filter.right_operand == 99
+    print("  [OK] test_parse_delete_with_filter")
+
+
+def test_parse_group_by():
+    nodes = _compile("SELECT campo, COUNT(campo) FROM T GROUP BY campo")
+    node = nodes[0]
+    assert len(node.group_by_cols) == 1
+    assert node.group_by_cols[0] == "campo"
+    assert len(node.aggregations) == 1
+    assert node.aggregations[0].func_name == "COUNT"
+    print("  [OK] test_parse_group_by")
+
+
+if __name__ == "__main__":
+    print("=== debug_parser.py ===")
+    test_parse_create_basic()
+    test_parse_create_with_index()
+    test_parse_create_rtree()
+    test_parse_insert()
+    test_parse_multiple_statements()
+    test_parse_select_star()
+    test_parse_select_where_eq()
+    test_parse_select_where_and()
+    test_parse_select_aggregate()
+    test_parse_join()
+    test_parse_between()
+    test_parse_spatial_radius()
+    test_parse_spatial_knn()
+    test_parse_spatial_negative_coords()
+    test_parse_delete_with_filter()
+    test_parse_group_by()
+    print("Todos los tests pasaron.")
