@@ -692,7 +692,7 @@ class StorageEngine:
         right_join_col_final = right_join_col.replace(right_table + ".", jt_alias + ".", 1) if jt_alias else right_join_col
 
         if left_sorted and right_sorted:
-            # reorganiza overflow→main ANTES de escanear para garantizar orden en disco
+            # reorganiza overflow->main ANTES de escanear para garantizar orden en disco
             self._ensure_sorted(left_table)
             self._ensure_sorted(right_table)
             # scan directo como iteradores: merge_join consume sin materializar ambos lados

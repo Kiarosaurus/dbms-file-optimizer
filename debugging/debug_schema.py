@@ -67,7 +67,7 @@ def test_record_size_consistent():
         SchemaField("b", FieldType.STRING, str_size=10),
     ]
     ser = RecordSerializer(fields)
-    # INTEGER = 4 bytes, STRING(10) = 10 bytes → total = 14
+    # INTEGER = 4 bytes, STRING(10) = 10 bytes -> total = 14
     assert ser.record_size == 14, f"record_size incorrecto: {ser.record_size}"
     print("  [OK] test_record_size_consistent")
 

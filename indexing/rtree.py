@@ -53,7 +53,7 @@ class RTreeIndex(BaseIndex):
         if not os.path.exists(file_path):
             self._bootstrap()
 
-    # ─── API pública ────────────
+    # --- API pública ------------
 
     # inserta un punto 2d usando descenso choose_leaf y quadratic split si hay overflow
     def add(self, point: Tuple[float, float], record_id: int) -> None: 
@@ -163,9 +163,9 @@ class RTreeIndex(BaseIndex):
     def reorganize(self) -> None:
         pass   
 
-    # ─── Helpers de eliminación ────────────
+    # --- Helpers de eliminación ------------
 
-    # DFS root→target acumulando (parent_id, child_index); retorna True si lo encuentra
+    # DFS root->target acumulando (parent_id, child_index); retorna True si lo encuentra
     def _find_path(
         self,
         node_id: int,
@@ -245,7 +245,7 @@ class RTreeIndex(BaseIndex):
         for x, y, rid in reinsert:
             self.add((x, y), rid)
 
-    # ─── ChooseLeaf ──────────
+    # --- ChooseLeaf ----------
 
     # elige el nodo hijo que requiere menor aumento de área — desciende hasta el leaf
     def _choose_leaf(
@@ -271,7 +271,7 @@ class RTreeIndex(BaseIndex):
             path.append((current, best_i))
             current = entries[best_i][4]
 
-    # ─── AdjustTree ────────────
+    # --- AdjustTree ------------
     # sube por el path actualizando MBRs y propagando splits hasta la raíz
     def _adjust_tree(
         self,
@@ -322,7 +322,7 @@ class RTreeIndex(BaseIndex):
             _, total = self._read_meta()
             self._write_meta(new_root_id, total)
 
-    # ─── Spatial DFS ───────────
+    # --- Spatial DFS -----------
 
     # dfs recursivo que poda subtrees cuyo MBR mindist supera el radio
     def _spatial_dfs(
@@ -346,7 +346,7 @@ class RTreeIndex(BaseIndex):
                 else:
                     self.nodes_pruned += 1
 
-    # ─── Quadratic Split ────
+    # --- Quadratic Split ----
 
     # wrapper que convierte leaf entries a MBRs puntuales y llama al split genérico
     def _split_leaf(
@@ -422,7 +422,7 @@ class RTreeIndex(BaseIndex):
 
         return g1, g2
 
-    # ─── Helpers de MBR ───────────
+    # --- Helpers de MBR -----------
 
     # calcula el MBR mínimo que envuelve todas las entradas del nodo
     def _compute_mbr(self, node_id: int) -> Tuple[float, float, float, float]:
@@ -441,7 +441,7 @@ class RTreeIndex(BaseIndex):
             return (min(e[0] for e in entries), min(e[1] for e in entries),
                     max(e[2] for e in entries), max(e[3] for e in entries))
 
-    # ─── Helpers a nivel de page ──────────
+    # --- Helpers a nivel de page ----------
 
     # revisa el primer byte del page header para saber si es leaf o internal
     def _is_leaf(self, page: bytearray) -> bool:
@@ -499,7 +499,7 @@ class RTreeIndex(BaseIndex):
                              x1, y1, x2, y2, cid)
         self._write_page(node_id, bytes(page))
 
-    # ─── Metadata + I/O ────────
+    # --- Metadata + I/O --------
 
     # lee root_id y total_nodes del block 0
     def _read_meta(self) -> Tuple[int, int]:
@@ -534,7 +534,7 @@ class RTreeIndex(BaseIndex):
         struct.pack_into(NODE_HDR_FMT, page, 0, NODE_LEAF, 0)
         self._write_page(1, bytes(page))
 
-    # ─── Helpers de debug ──────────
+    # --- Helpers de debug ----------
 
     # retorna stats del árbol: root, total nodes, height y capacidades M
     def tree_stats(self) -> str:

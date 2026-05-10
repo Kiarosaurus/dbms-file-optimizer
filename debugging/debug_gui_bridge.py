@@ -117,6 +117,7 @@ def test_bridge_seed_demo():
             from core.concurrency import init_concurrency
             init_concurrency(os.path.join(ws_path, "journal.log"))
             bridge = JupiterBridge(ws_path)
+            bridge.wait_seed()
             tables = bridge.get_tables()
             # El seed debe crear Canciones, Ciudades (datos reales Kaggle)
             demo_tables = {"Canciones", "Ciudades"}

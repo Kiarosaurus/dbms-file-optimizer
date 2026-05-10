@@ -8,7 +8,7 @@ from core.storage import DiskController, PAGE_SIZE
 from core.schema import RecordSerializer, FieldType
 from indexing.base_index import BaseIndex
 
-# ─── Constantes del layout binario ─────────
+# --- Constantes del layout binario ---------
 
 # Página de bucket: [local_depth:u32][n_records:u32][records...]
 BUCKET_HDR_FMT  = "!II"
@@ -54,7 +54,7 @@ class ExtendibleHashIndex(BaseIndex):
         else:
             self._load_meta()
 
-    # ─── API pública ───────
+    # --- API pública -------
 
     # hashea la key y elige el bucket usando global_depth bits — acceso a disco O(1)
     def search(self, key: Any) -> Optional[Dict[str, Any]]:
@@ -116,7 +116,7 @@ class ExtendibleHashIndex(BaseIndex):
     def reorganize(self) -> None:
         pass   # extendible hashing se autoorganiza
 
-    # ─── Merge de bucket + reducción del directorio ─────────
+    # --- Merge de bucket + reducción del directorio ---------
 
     # intenta fusionar bucket_id con su buddy si tienen el mismo local_depth y caben juntos
     def _try_merge_bucket(self, bucket_id: int, h: int) -> None:
@@ -178,7 +178,7 @@ class ExtendibleHashIndex(BaseIndex):
         self._save_meta()
         self._try_shrink_directory()  
 
-    # ─── Función hash ────────────
+    # --- Función hash ------------
 
     # alias público para inspeccionar el valor hash desde afuera
     def hash_func(self, key: Any) -> int:
@@ -200,7 +200,7 @@ class ExtendibleHashIndex(BaseIndex):
         h = zlib.crc32(raw) & 0xFFFFFFFF
         return h & ((1 << depth) - 1)
 
-    # ─── Duplicación del directorio ──────────────
+    # --- Duplicación del directorio --------------
 
     # dobla el directorio de 2^d a 2^(d+1) preservando el routing de buckets existentes
     def _double_directory(self) -> None:
@@ -210,7 +210,7 @@ class ExtendibleHashIndex(BaseIndex):
         self.global_depth += 1
         self._save_meta()
 
-    # ─── Split de bucket ──────────
+    # --- Split de bucket ----------
 
     # redistribuye los registros entre el bucket viejo y el nuevo usando el bit extra
     def _split_bucket(self, bucket_id: int, h: int, local_depth: int) -> None:
@@ -247,7 +247,7 @@ class ExtendibleHashIndex(BaseIndex):
 
         self._save_meta()
 
-    # ─── Helpers de página de bucket ─────────────
+    # --- Helpers de página de bucket -------------
 
     # lee el header del bucket page y retorna (local_depth, n_records)
     def _bucket_header(self, page: bytearray) -> Tuple[int, int]:
@@ -286,7 +286,7 @@ class ExtendibleHashIndex(BaseIndex):
             page[off : off + self.record_size] = self.serializer.serialize(rec)
         self._write_page(bucket_id, bytes(page))
 
-    # ─── Metadata + E/S de pages ──────
+    # --- Metadata + E/S de pages ------
 
     # carga el header del block 0 y el directorio del archivo .dir
     def _load_meta(self) -> None:
@@ -327,7 +327,7 @@ class ExtendibleHashIndex(BaseIndex):
         self._save_meta()
         self._write_bucket_records(1, local_depth=0, records=[])
 
-    # ─── Helpers de debug ────────────
+    # --- Helpers de debug ------------
 
     # retorna un string con el estado del directorio y los buckets para debugging
     def directory_state(self) -> str:

@@ -250,12 +250,12 @@ def test_wait_for_graph_no_cycle():
 
 
 def test_wait_for_graph_cycle_raises():
-    """WaitForGraph detecta ciclo T1→T2→T1 y lanza DeadlockError."""
+    """WaitForGraph detecta ciclo T1->T2->T1 y lanza DeadlockError."""
     g = WaitForGraph()
     g.register_wait(10, {20})   # T10 espera T20
     g.register_wait(20, {30})   # T20 espera T30
     try:
-        # T30 espera T10 → ciclo 30→10→20→30
+        # T30 espera T10 -> ciclo 30->10->20->30
         g.register_wait(30, {10})
         assert False, "DeadlockError no fue lanzado"
     except DeadlockError:

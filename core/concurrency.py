@@ -145,7 +145,7 @@ class WaitForGraph:
     """
     def __init__(self) -> None:
         self._mu    = threading.Lock()
-        self._edges: Dict[int, Set[int]] = {}   # waiter_tid → holders
+        self._edges: Dict[int, Set[int]] = {}   # waiter_tid -> holders
 
     def register_wait(self, waiter: int, holders: Set[int]) -> None:
         """Anota que el waiter se quedo esperando a los holders. Si detecta un ciclo, tira un DeadlockError."""
@@ -195,7 +195,7 @@ class PageRWLock:
         self._writer_count: int       = 0  
         self._writers_waiting: int    = 0
 
-    # ── shared (read) ──────────────────────────────────────────────────────
+    # -- shared (read) ------------------------------------------------------
 
     def acquire_read(self, txn_id: str = "-", page_label: str = "?") -> None:
         tid      = threading.get_ident()
@@ -240,7 +240,7 @@ class PageRWLock:
             if not self._readers:
                 self._cond.notify_all()
 
-    # ── exclusive (write) ──────────────────────────────────────────────────
+    # -- exclusive (write) --------------------------------------------------
 
     def acquire_write(self, txn_id: str = "-", page_label: str = "?") -> None:
         tid      = threading.get_ident()

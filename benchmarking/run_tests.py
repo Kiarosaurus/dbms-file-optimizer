@@ -86,19 +86,19 @@ def _load_csv_records(
 
 
 def load_airports() -> List[Dict[str, Any]]:
-    """Carga airports_3376.csv → N ≈ 3 376 registros."""
+    """Carga airports_3376.csv -> N ≈ 3 376 registros."""
     return _load_csv_records(CSV_AIRPORTS, name_col="name", lat_col="latitude", lon_col="longitude")
 
 
 def load_disasters() -> List[Dict[str, Any]]:
-    """Carga global_natural_disasters_2000_2025_46419.csv → N ≈ 46 419 registros."""
+    """Carga global_natural_disasters_2000_2025_46419.csv -> N ≈ 46 419 registros."""
     return _load_csv_records(
         CSV_DISASTERS, name_col="disaster_type", lat_col="latitude", lon_col="longitude"
     )
 
 
 def load_schools() -> List[Dict[str, Any]]:
-    """Carga us-public-schools_101884.csv (delimitador ';') → N ≈ 101 884 registros."""
+    """Carga us-public-schools_101884.csv (delimitador ';') -> N ≈ 101 884 registros."""
     return _load_csv_records(
         CSV_SCHOOLS, name_col="NAME", lat_col="LATITUDE", lon_col="LONGITUDE",
         delimiter=";", encoding="utf-8-sig",

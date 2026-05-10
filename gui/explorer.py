@@ -126,7 +126,7 @@ class PageViewer(ttk.Frame):
         self._info_lbl = ttk.Label(top, text="  Selecciona un archivo para comenzar")
         self._info_lbl.grid(row=0, column=12, padx=(10, 0))
 
-        # ── Text area ────────────────────────────────────────────────────
+        # -- Text area ----------------------------------------------------
         body = ttk.Frame(self)
         body.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
         body.rowconfigure(0, weight=1)
@@ -179,7 +179,7 @@ class PageViewer(ttk.Frame):
         # page padding (bytes sin usar al final de la página) — negro casi puro
         self._text.tag_configure("sch_pad", background="#111118", foreground="#28283c")
 
-        # ── Legend (schema visual, oculta por defecto) ─────────────────────
+        # -- Legend (schema visual, oculta por defecto) ---------------------
         self._legend_frame = tk.Frame(self, bg=self._C["mantle"])
         self._legend_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 6))
         self._build_schema_legend()
@@ -533,7 +533,7 @@ class PageViewer(ttk.Frame):
 
         _FT_LABEL = {
             FieldType.INTEGER: "INT",
-            FieldType.BIGINT:  "BIGINT",   # 'i'→'q': 8 bytes, previene overflow
+            FieldType.BIGINT:  "BIGINT",   # 'i'->'q': 8 bytes, previene overflow
             FieldType.FLOAT:   "FLOAT",
             FieldType.STRING:  "STRING",
         }

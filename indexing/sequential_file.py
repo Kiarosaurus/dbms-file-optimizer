@@ -121,7 +121,7 @@ class SequentialIndex(BaseIndex):
         self.reorganize_count += 1
     
 
-    # ─── Page-batched I/O helpers ──────────────────────────────────────────────
+    # --- Page-batched I/O helpers ---
 
     # genera records leyendo ceil(count/RPP) páginas — cada página leída UNA vez
     def _scan_records(self, path: str, count: int):
@@ -178,7 +178,7 @@ class SequentialIndex(BaseIndex):
     def range_search(self, start_key: Any, end_key: Any) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []
 
-        # ── Main (sorted): binary search al primer record >= start_key ──
+        # -- Main (sorted): binary search al primer record >= start_key --
         count = self._read_count(self.main_path)
         if count > 0:
             lo, hi, first = 0, count - 1, count
@@ -195,7 +195,7 @@ class SequentialIndex(BaseIndex):
                     break
                 results.append(rec)
 
-        # ── linear scan ──
+        # -- linear scan --
         for i in range(self._read_count(self.overflow_path)):
             rec = self._read_record(self.overflow_path, i)
             k   = rec[self.key_field]

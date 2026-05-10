@@ -27,7 +27,7 @@ KEY_SIZE = 4   # int32 or float32 — both 4 bytes
 
 NO_NEXT = 0xFFFFFFFF   
 
-# ─── Geometría de slot de nodo interno ───────────────────────────────────────────────
+# --- Geometría de slot de nodo interno ---
 #
 #  Offset  Content
 #  ------  -------
@@ -85,7 +85,7 @@ class BPlusTreeIndex(BaseIndex):
         if not os.path.exists(file_path):
             self._bootstrap()
 
-    # ─── API Pública ──────────
+    # --- API Pública ---
 
     # desciende root->leaf y escanea la hoja buscando la key
     def search(self, key: Any) -> Optional[Dict[str, Any]]:
@@ -189,7 +189,7 @@ class BPlusTreeIndex(BaseIndex):
 
         return results
 
-    # ─── Recorrido del árbol ───────
+    # --- Recorrido del árbol ---
 
     # desciende desde root hasta la hoja que contiene la key, acumula path si se pide
     def _descend(
@@ -215,7 +215,7 @@ class BPlusTreeIndex(BaseIndex):
                 path.append((current, ci))
             current = self._int_child(page, ci)
 
-    # ─── Auxiliares de hoja ───────────
+    # --- Auxiliares de hoja ---
 
     # escanea la hoja linealmente buscando la primera coincidencia de key
     def _leaf_scan(self, page: bytearray, key: Any) -> Optional[Dict[str, Any]]:
@@ -285,7 +285,7 @@ class BPlusTreeIndex(BaseIndex):
         children      = [self._int_child(parent_page, i) for i in range(n_keys + 1)]
 
         if ci > 0:
-            # ── Hermano izquierdo ─────
+            # -- Hermano izquierdo ---
             sib_id   = children[ci - 1]
             sib_page = self._read_page(sib_id)
             sib_n, sib_next = self._leaf_header(sib_page)
@@ -307,7 +307,7 @@ class BPlusTreeIndex(BaseIndex):
             del children[ci]
 
         elif ci < n_keys:
-            # ── Hermano derecho ────
+            # -- Hermano derecho ---
             sib_id   = children[ci + 1]
             sib_page = self._read_page(sib_id)
             sib_n, sib_next = self._leaf_header(sib_page)
@@ -332,7 +332,7 @@ class BPlusTreeIndex(BaseIndex):
         else:
             return False  # la hoja es el único hijo — no hay nada que hacer
 
-        # ── Actualiza padre después de combinar; colapso de raíz manejado por llamador ─────────
+        # --- Actualiza padre después de combinar; colapso de raíz manejado por llamador ---
         new_page = bytearray(PAGE_SIZE)
         self._pack_internal(new_page, keys, children)
         self._write_page(parent_id, bytes(new_page))
@@ -417,7 +417,7 @@ class BPlusTreeIndex(BaseIndex):
         self._write_page(parent_id, bytes(new_parent))
         return True
 
-    # ─── División de hoja ───────────
+    # --- División de hoja ---
 
     # divide la hoja llena: mitad izquierda, mitad derecha, promueve key al parent
     def _split_leaf(
@@ -457,7 +457,7 @@ class BPlusTreeIndex(BaseIndex):
         promoted = all_recs[mid][self.key_field]
         self._push_up(path, leaf_id, promoted, right_id)
 
-    # ─── División interna / Propagación de clave ────────────────────
+    # --- División interna / Propagación de clave ---
 
     # propaga la key promovida hacia el parent, recursivo si el parent también llena
     def _push_up(
@@ -510,7 +510,7 @@ class BPlusTreeIndex(BaseIndex):
 
             self._push_up(path, parent_id, bubble_key, right_node_id)
 
-    # ─── Internal node binary packing ───────────
+    # --- Internal node binary packing ---
 
     # empaqueta header + punteros/keys de un nodo interno en la page: P[0] K[0] P[1] K[1] ...
     def _pack_internal(
@@ -553,7 +553,7 @@ class BPlusTreeIndex(BaseIndex):
         off = INT_HDR_SIZE + ci * (self._key_size + PTR_SIZE)
         return struct.unpack_from("!I", page, off)[0]
 
-    # ─── Metadata + page I/O ───────
+    # --- Metadata + page I/O ---
 
     # lee root_id y total_nodes del bloque 0 del archivo
     def _read_meta(self) -> Tuple[int, int]:

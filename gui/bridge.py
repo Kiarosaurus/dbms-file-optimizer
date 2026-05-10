@@ -351,3 +351,31 @@ class QueryBridge:
             "accesses": t._disk_accesses,
             "ms":       t._total_ms,
         }
+
+    def execute_sql(self, sql: str) -> Dict[str, Any]:
+        result = self.execute(sql)
+        d: Dict[str, Any] = {
+            "kind":    result.kind,
+            "columns": result.columns,
+            "rows":    result.rows,
+            "message": result.message,
+        }
+        if result.kind == "error":
+            d["error"] = result.message
+        return d
+
+    def massive_ingest_csv(
+        self,
+        csv_path: str,
+        table_name: str,
+        progress_cb=None,
+        spatial_index_cols: Optional[List[str]] = None,
+    ) -> int:
+        return self.massive_ingest(csv_path, table_name, progress_cb, spatial_index_cols)
+
+    def wait_seed(self, timeout: float = 30.0) -> None:
+        if self._seed_thread is not None and self._seed_thread.is_alive():
+            self._seed_thread.join(timeout=timeout)
+
+
+JupiterBridge = QueryBridge

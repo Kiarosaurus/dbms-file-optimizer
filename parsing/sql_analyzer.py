@@ -316,25 +316,25 @@ class QueryCompiler:
 
         left_col = self._parse_qualified_name()
 
-        # ── col BETWEEN low AND high ─────────────────────────────────
+        # -- col BETWEEN low AND high ---
         if self._current_kind() == TokenKind.KW_BETWEEN:
             self._advance()                          # consume BETWEEN
             low  = self._parse_rhs_value()
             self._expect(TokenKind.KW_AND)
             high = self._parse_rhs_value()
-            # desugar: col BETWEEN lo AND hi → col >= lo AND col <= hi
+            # desugar: col BETWEEN lo AND hi -> col >= lo AND col <= hi
             return FilterExpr(
                 left_operand  = FilterExpr(left_col, ">=", low),
                 operator      = "AND",
                 right_operand = FilterExpr(left_col, "<=", high),
             )
 
-        # ── col IN (POINT(cx, cy), RADIUS r | K k) — single-col compat
+        # -- col IN (POINT(cx, cy), RADIUS r | K k) — single-col compat
         if self._current_kind() == TokenKind.KW_IN:
             self._advance()                          # consume IN
             return self._parse_spatial_body([left_col])
 
-        # ── Standard comparison ──────────────────────────────────────
+        # -- Standard comparison ---
         op_tok = self._advance()
         if op_tok.kind not in _COMPARISON_OPS:
             raise ParseError(
