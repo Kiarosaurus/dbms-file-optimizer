@@ -60,11 +60,11 @@ _EXAMPLE_QUERIES = [
     ("INSERT",
      "INSERT INTO Canciones VALUES (999, 2024, 'Peru', 'NuevoArtista', 'NuevaCancion', 200)"),
     ("CREATE TABLE",
-     "CREATE TABLE Artistas (ID INTEGER, Nombre VARCHAR(40), Pais VARCHAR(20))"),
+     "CREATE TABLE Airports (iata VARCHAR(10), name VARCHAR(40), city VARCHAR(30), country VARCHAR(20), latitude FLOAT, longitude FLOAT) INDEX (RTREE latitude)"),
     ("SPATIAL RADIUS",
-     "SELECT * FROM Ciudades WHERE Lat IN (POINT(30.9, 71.7), RADIUS 5)"),
+     "SELECT * FROM Airports WHERE latitude IN (POINT(30.9, 71.7), RADIUS 5)"),
     ("KNN",
-     "SELECT * FROM Ciudades WHERE Lat IN (POINT(30.9, 71.7), K 3)"),
+     "SELECT * FROM Airports WHERE latitude IN (POINT(30.9, 71.7), K 3)"),
 ]
 
 
